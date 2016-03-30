@@ -11,8 +11,8 @@ from utils import getClientIp
 #debug
 import types
 
-# generate a challenge
-def gen_challenge():
+# generate an enroll challenge
+def gen_enroll_challenge():
 	enrollRequest = {}
 	
 	enrollRequest['signrequest'] = []
@@ -30,7 +30,7 @@ def gen_challenge():
 def enroll(request):
 	print 'LOG:enroll -------------- from ' +  getClientIp(request)
 	
-	enrollRequest, challenge = gen_challenge()
+	enrollRequest, challenge = gen_enroll_challenge()
 	
 	#create a new user
 	User.objects.filter(userName='HaiChiang').delete()
@@ -159,13 +159,52 @@ def com_register(request):
 	
 def sign(request):
 	#to do
-	print 'sign'
-	return JsonResponse({'name':'test'})
+	print 'LOG:sign -------------- from ' +  getClientIp(request)
+
+	signRequest = {}
+	
+	key_handle = 'abc'
+	Rand.rand_seed(os.urandom(1024))
+	challenge = urlsafe_b64encode(Rand.rand_bytes(32))
+	signRequest['signRequests'] = [{'challenge': 'mLkHCmQZGbZEXefhWByeKo5zTFldYLIZFRGeHdvTFBc=', 
+				'version': 'U2F_V2', 'appId': 'http://localhost:8000', 'keyhanle': key_handle}]
+				
+	signRequest['registerRequests'] = []
+
+	return JsonResponse(signRequest)
 
 def com_auth(request):
 	#to do 
-	print 'com_auth'
-	return JsonResponse({'name':'test'})
+	print 'LOG:com_auth -------------- from ' +  getClientIp(request)
+	
+	result = 0
+	if request.method == 'POST':
+		data = json.loads(request.body)
+		
+		#
+		#processing keyhanle
+		#
+		keyhanle = urlsafe_b64decode(data['keyhanle'].encode('utf-8'))
+ 		print 'LOG:key_handle ------------- ' + key_handle
+		 
+		
+		#
+		#processing clientdata
+		#
+		
+		#convert the clientdata to a dict structure
+		clientdata = urlsafe_b64decode(data['clientData'].encode('utf-8'))
+		clientdata_dict = eval(clientdata)
+ 		print 'LOG:clientData ------------- ' + clientdata
+		 
+		#
+		#processing signature
+		#
+		signature = urlsafe_b64decode(data['signature'].encode('utf-8'))
+		print 'LOG:signature ------------- ' + signature
+		
+	
+	return HttpResponse(result)
 
 
 
