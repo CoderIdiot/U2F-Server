@@ -1,0 +1,6 @@
+stunnel https
+HTTPS python manager.py runserver 0.0.0.0:8000
+
+to visit the page:
+use the https://127.0.0.1/[enroll]
+doesn't need the port num
