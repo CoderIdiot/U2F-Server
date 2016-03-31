@@ -15,13 +15,19 @@ import types
 def gen_enroll_challenge():
 	enrollRequest = {}
 	
-	enrollRequest['signrequest'] = []
+	enrollRequest['SignRequest'] = []
 	Rand.rand_seed(os.urandom(1024))
 	challenge = urlsafe_b64encode(Rand.rand_bytes(32))
-	enrollRequest['registerRequests'] = [{'challenge': 'mLkHCmQZGbZEXefhWByeKo5zTFldYLIZFRGeHdvTFBc=', 
+	enrollRequest['RegisterRequest'] = [{'challenge': challenge, 
 				'version': 'U2F_V2', 'appId': 'http://localhost:8000'}]
+	enrollRequest['sessionId'] = '123456' 
 	
-	return enrollRequest, challenge
+	strong_enrollRequest = {}
+	strong_enrollRequest['Challenge'] = enrollRequest
+	strong_enrollRequest['Message'] = ''
+	strong_enrollRequest['Error'] = ''
+	
+	return strong_enrollRequest, challenge
 
 #
 # URL processing function
@@ -44,12 +50,14 @@ def com_register(request):
 	
 	#the user HaiChiang is fixed in the database
 	user = User.objects.get(userName='HaiChiang')
-	print 'LOG:com_register --------------' +  user.challenge
+	print 'LOG:Chanllenge --------------' +  user.challenge
 	
 	result = 0
 	##check the client response
 	if request.method == 'POST':
 		data = json.loads(request.body)
+		#print data
+		
 		
 		#
 		#processing clientdata
@@ -70,7 +78,7 @@ def com_register(request):
 			
 			#return HttpResponse(result)
 		else:
-			pass
+			print 'LOG:challenge Check ------------- ' + clientdata_dict['challenge']
 		
 		#check the origin
 		#to do 
@@ -84,11 +92,9 @@ def com_register(request):
 		
 		#check the types
 		if clientdata_dict['typ'] != 'navigator.id.finishEnrollment':
-			pass
-			
-			#return HttpResponse(result)
+			return HttpResponse(result)		
 		else:
-			pass
+			print 'LOG:typ checked ------------- ' 	
 			
 		
 		#	
@@ -103,18 +109,21 @@ def com_register(request):
 		
 			
 		registrationdata = registrationdata[1:]
-		#get the public key & store
+		#get the public key
 		public_key = registrationdata[:65]
 		print 'LOG:public key ------------- ' + public_key.encode('hex')
-		#to do: store
+		#store
+		user.public_key = public_key.encode('hex')
 		
 		
-		#get the key_handle & store
+		#get the key_handle
 		registrationdata = registrationdata[65:]
 		key_handle_len = registrationdata[:1]
 		print 'LOG:key handle len ---------' + key_handle_len.encode('hex')
 		key_handle = registrationdata[1:65]
 		print 'LOG:key handle ----------' + key_handle.encode('hex')
+		#store
+		user.key_handle = key_handle.encode('hex')
 		
 		
 		#get the attestation cert
@@ -151,29 +160,45 @@ def com_register(request):
 		puk.verify_init()
 		puk.verify_update(msg)
 		result = puk.verify_final(sig)
+		if result == 1:
+			user.save()
 		print result		
 		
 		
-	User.objects.filter(userName='HaiChiang').delete()
+	#User.objects.filter(userName='HaiChiang').delete()
 	return HttpResponse(result)
 	
 def sign(request):
 	#to do
 	print 'LOG:sign -------------- from ' +  getClientIp(request)
 
+
+	#the user HaiChiang is fixed in the database
+	user = User.objects.get(userName='HaiChiang')
+	
+	#create the signrequest
 	signRequest = {}
 	
-	key_handle = 'abc'
+	key_handle = user.key_handle
 	Rand.rand_seed(os.urandom(1024))
 	challenge = urlsafe_b64encode(Rand.rand_bytes(32))
-	signRequest['signRequests'] = [{'challenge': 'mLkHCmQZGbZEXefhWByeKo5zTFldYLIZFRGeHdvTFBc=', 
-				'version': 'U2F_V2', 'appId': 'http://localhost:8000', 'keyhanle': key_handle}]
-				
-	signRequest['registerRequests'] = []
+	signRequest['signRequests'] = [{'challenge': challenge, 
+				'version': 'U2F_V2', 'appId': 'http://localhost:8000', 'keyHandle': key_handle, "sessionId":"123456"}]			
+	#signRequest['registerRequests'] = []
+	
+	strong_signRequest = {}
+	strong_signRequest['Challenge'] = signRequest
+	strong_signRequest['Message'] = ''
+	strong_signRequest['Error'] = ''
 
-	return JsonResponse(signRequest)
+	user.challenge = challenge
+	return JsonResponse(strong_signRequest)
 
 def com_auth(request):
+	#the user HaiChiang is fixed in the database
+	user = User.objects.get(userName='HaiChiang')
+	print 'LOG:Chanllenge --------------' +  user.challenge
+	
 	#to do 
 	print 'LOG:com_auth -------------- from ' +  getClientIp(request)
 	
@@ -182,10 +207,10 @@ def com_auth(request):
 		data = json.loads(request.body)
 		
 		#
-		#processing keyhanle
+		#processing keyhandle
 		#
-		keyhanle = urlsafe_b64decode(data['keyhanle'].encode('utf-8'))
- 		print 'LOG:key_handle ------------- ' + key_handle
+		keyhandle = urlsafe_b64decode(data['keyhandle'].encode('utf-8'))
+ 		print 'LOG:key_handle ------------- ' + keyhandle
 		 
 		
 		#
@@ -194,14 +219,36 @@ def com_auth(request):
 		
 		#convert the clientdata to a dict structure
 		clientdata = urlsafe_b64decode(data['clientData'].encode('utf-8'))
-		clientdata_dict = eval(clientdata)
+		#clientdata_dict = eval(clientdata)
  		print 'LOG:clientData ------------- ' + clientdata
-		 
+		
 		#
 		#processing signature
 		#
 		signature = urlsafe_b64decode(data['signature'].encode('utf-8'))
 		print 'LOG:signature ------------- ' + signature
+		
+		
+		#public key 
+		prefix = "3059301306072a8648ce3d020106082a8648ce3d030107034200".decode('hex')
+		tail_key = '04EC4FDC9FBDECFE8F21B178693703733C0E3A96BE41590CCF98DCFB2DA8A19BA8A3854E8B5E57D1E01AEDCA8F28B0B643BC890174A08018C34F91D0A79D064548'.decode('hex')
+		ec = EC.pub_key_from_der(prefix + tail_key)
+		
+		#msg
+		app_para = ''
+		user_presence = ''
+		counter = ''
+		challen_para = ''
+		#msg = app_para + user_presence + counter + challen_para
+		msg = '002122232425262728292A2B2C2D2E2F303132333435363738393A3B3C3D3E3F400102030405060708090A0B0C0D0E0F101112131415161718191A1B1C1D1E1F200000000004EC4FDC9FBDECFE8F21B178693703733C0E3A96BE41590CCF98DCFB2DA8A19BA8A3854E8B5E57D1E01AEDCA8F28B0B643BC890174A08018C34F91D0A79D064548'.decode('hex')
+		h = sha256()
+		h.update(msg)
+		
+		#signature
+		sig = '304402206613ECA917F891ABADEAB63054CE7DFE3F32268FCE7D0AF4B37C6000C9D13B2B022067E717B413597268EF28EC72EE79135EB87026DB14E64776C15CD7335D95402A'.decode('hex')
+		
+		#verify
+		result =  ec.verify_dsa_asn1(h.digest(), sig)
 		
 	
 	return HttpResponse(result)

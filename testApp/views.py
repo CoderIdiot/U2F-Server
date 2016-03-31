@@ -7,10 +7,19 @@ from base64 import urlsafe_b64decode, urlsafe_b64encode
 
 from models import User
 
+import json
+
 # Create your views here.
 def testView1(request):
 	user = User.objects.create(userName='andy', challenge='1234567890')
 	user.save()
+	
+	result = 0
+	if request.method == 'POST':
+		data = json.loads(request.body)
+		userName = data['userName']
+ 		print 'LOG:userName ------------- ' + userName
+		
 	return JsonResponse({'result':'test'})
 	
 	
